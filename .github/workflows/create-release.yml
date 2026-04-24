@@ -1,0 +1,53 @@
+name: Create Release Branch & PR
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  create-release:
+    name: Create release branch and PR
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Compute release branch name
+        run: |
+          BRANCH_NAME="release_$(date -u +'%Y_%m_%d')"
+          echo "BRANCH_NAME=${BRANCH_NAME}" >> "$GITHUB_ENV"
+          echo "Branch will be: ${BRANCH_NAME}"
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check for duplicate branch
+        run: |
+          if git ls-remote --exit-code --heads origin "$BRANCH_NAME" > /dev/null 2>&1; then
+            echo "::error::Branch '${BRANCH_NAME}' already exists on origin. Aborting."
+            exit 1
+          fi
+
+      - name: Create and push release branch
+        run: |
+          git branch "$BRANCH_NAME" origin/develop
+          git push origin "$BRANCH_NAME"
+
+      - name: Create Pull Request
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr create \
+            --base main \
+            --head "$BRANCH_NAME" \
+            --title "Release $(date -u +'%Y-%m-%d')" \
+            --body "Automated release PR created by the **Create Release Branch & PR** workflow.
+
+          - **Source branch:** \`${BRANCH_NAME}\` (based on \`origin/develop\`)
+          - **Target branch:** \`main\`
+          - **Triggered by:** @${{ github.actor }}
+          - **Run:** ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
